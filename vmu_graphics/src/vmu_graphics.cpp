@@ -1,18 +1,9 @@
 #include "vmu_graphics.hpp"
 
-#define GLM_FORCE_RADIANS
-#define GLM_FORCE_DEPTH_ZERO_TO_ONE
-#include <glm/vec4.hpp>
-#include <glm/mat4x4.hpp>
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 //#define STB_IMAGE_WRITE_IMPLEMENTATION
 //#include "stb_image_write.h"
-
-#include <chrono>
 
 struct UniformBufferObject {
     alignas(16) glm::mat4 model;
@@ -57,19 +48,15 @@ struct Vertex {
 };
 
 const std::vector<Vertex> vertices = {
-    {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
-    {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
-    {{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
-    {{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}},
+    {{-1.0f, -1.0f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
+    {{1.0f, -1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
+    {{1.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+    {{-1.0f, 1.0f, 0.0f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}},
 };
 
 const std::vector<uint16_t> indices = {
      0, 1, 2, 2, 3, 0
 };
-
-VmuGraphics::VmuGraphics() {
-   
-}
 
 void VmuGraphics::run() {
     initWindow();
@@ -81,15 +68,91 @@ void VmuGraphics::run() {
 void VmuGraphics::initWindow() {
     glfwInit();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
-    window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+    window = glfwCreateWindow(scale * vmuWidth, scale * vmuHeight, "VMU Image Editor", nullptr, nullptr);
     glfwSetWindowUserPointer(window, this);
     glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
+
+    glfwSetWindowUserPointer(window, this);
+    glfwSetKeyCallback(window, keyCallback);
+    glfwSetCursorPosCallback(window, cursorPositionCallback);
+    glfwSetMouseButtonCallback(window, mouseButtonCallback);
 }
 
 void VmuGraphics::framebufferResizeCallback(GLFWwindow* window, int width, int height) {
     auto app = reinterpret_cast<VmuGraphics*>(glfwGetWindowUserPointer(window));
     app->framebufferResized = true;
+}
+
+void VmuGraphics::keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
+    auto app = reinterpret_cast<VmuGraphics*>(glfwGetWindowUserPointer(window));
+    if (key == GLFW_KEY_E && action == GLFW_PRESS) {
+        throw std::runtime_error("Key pressed!");
+    }
+    else if (key == GLFW_KEY_B && action == GLFW_PRESS) {
+        app->backgroundColor.x = rand() % 256;
+        app->backgroundColor.y = rand() % 256;
+        app->backgroundColor.z = rand() % 256;
+    }
+    else if (key == GLFW_KEY_F && action == GLFW_PRESS) {
+        app->foregroundColor.x = rand() % 256;
+        app->foregroundColor.y = rand() % 256;
+        app->foregroundColor.z = rand() % 256;
+    }
+    if (key == GLFW_KEY_C && action == GLFW_PRESS) {
+        app->clearVmuScreen();
+    }
+}
+
+void VmuGraphics::mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
+    auto app = reinterpret_cast<VmuGraphics*>(glfwGetWindowUserPointer(window));
+    if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
+        app->leftLatch = true;
+    }
+    else if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE) {
+        app->leftLatch = false;
+    }
+    else if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS) {
+        app->rightLatch = true;
+    }
+    else if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_RELEASE) {
+        app->rightLatch = false;
+    }
+}
+
+void VmuGraphics::cursorPositionCallback(GLFWwindow* window, double xpos, double ypos) {
+    auto app = reinterpret_cast<VmuGraphics*>(glfwGetWindowUserPointer(window));
+    const int x = std::floor(xpos / app->scale);
+    const int y = app->vmuHeight - 1 - std::floor(ypos / app->scale);
+
+    std::cout << "cursor (" << xpos << ", " << ypos << ") -> " << x << ", " << y << std::endl;
+
+    bool badDraw = x < 0 || x >= app->vmuWidth || y < 0 || y >= app->vmuHeight;
+    if (badDraw) {
+        return;
+    }
+
+    glm::ivec3 color;
+    if (app->leftLatch) {
+        color = app->foregroundColor;
+    }
+    else if (app->rightLatch) {
+        color = app->backgroundColor;
+    }
+    else {
+        return;
+    }
+
+    unsigned char* dataInt = reinterpret_cast<unsigned char*>(app->vmuScreenMapped);
+    dataInt[4 * x + y * app->vmuWidth * 4] = color.x;
+    dataInt[4 * x + 1 + y * app->vmuWidth * 4] = color.y;
+    dataInt[4 * x + 2 + y * app->vmuWidth * 4] = color.z;
+    dataInt[4 * x + 3 + y * app->vmuWidth * 4] = 255;
+}
+
+void VmuGraphics::clearVmuScreen() {
+    std::memset(vmuScreenMapped, 255, vmuWidth * vmuHeight * 4);
+    backgroundColor = glm::ivec3(255, 255, 255);
 }
 
 void VmuGraphics::initVulkan() {
@@ -120,21 +183,8 @@ void VmuGraphics::initVulkan() {
 }
 
 void  VmuGraphics::doWork() {
-
-    void* data = nullptr;
-    vkMapMemory(device, stagingBufferMemory, 0, vmuWidth*vmuHeight*4, 0, &data);
-    VkDeviceSize vmuImageSize = vmuWidth * vmuHeight * 4;
-    unsigned char* dataInt = reinterpret_cast<unsigned char*>(data);
-    for (int i = 0; i < (size_t)vmuImageSize; i += 4) {
-        dataInt[i] = rand() % 256;
-        dataInt[i + 1] = rand() % 256;
-        dataInt[i + 2] = rand() % 256;
-        dataInt[i + 3] = 255;
-    }
-    vkUnmapMemory(device, stagingBufferMemory);
-
     transitionImageLayout(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-    copyBufferToImage(stagingBuffer, textureImage, static_cast<uint32_t>(vmuWidth), static_cast<uint32_t>(vmuHeight));
+    copyBufferToImage(vmuScreenBuffer, textureImage, static_cast<uint32_t>(vmuWidth), static_cast<uint32_t>(vmuHeight));
     transitionImageLayout(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 }
 
@@ -149,11 +199,10 @@ void VmuGraphics::mainLoop() {
 }
 
 void VmuGraphics::cleanup() {
+    vkUnmapMemory(device, vmuScreenBufferMemory);
 
-    delete[] vmuScreen;
-
-    vkDestroyBuffer(device, stagingBuffer, nullptr);
-    vkFreeMemory(device, stagingBufferMemory, nullptr);
+    vkDestroyBuffer(device, vmuScreenBuffer, nullptr);
+    vkFreeMemory(device, vmuScreenBufferMemory, nullptr);
 
     cleanupSwapChain();
 
@@ -881,35 +930,23 @@ void VmuGraphics::createGraphicsDescriptorSets() {
 }
 
 void VmuGraphics::createTextureImage() {
-    int texWidth, texHeight, texChannels;
-    stbi_uc* pixels = stbi_load("img/texture.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
-    VkDeviceSize imageSize = texWidth * texHeight * 4;
-
-    if (!pixels) {
-        throw std::runtime_error("failed to load texture image!");
-    }
-
-    vmuWidth = 48;
-    vmuHeight = 32;
     VkDeviceSize vmuImageSize = vmuWidth * vmuHeight * 4;
-    vmuScreen = new unsigned char[(size_t)vmuImageSize];
+    unsigned char * vmuScreen = new unsigned char[(size_t)vmuImageSize];
     for (int i = 0; i < (size_t)vmuImageSize; i += 4) {
-        vmuScreen[i] = rand() % 256;
-        vmuScreen[i+1] = rand() % 256;
-        vmuScreen[i+2] = rand() % 256;
+        vmuScreen[i] = backgroundColor.x;
+        vmuScreen[i+1] = backgroundColor.y;
+        vmuScreen[i+2] = backgroundColor.z;
         vmuScreen[i+3] = 255;
     }
 
-    createBuffer(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, static_cast<VkMemoryPropertyFlagBits>(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT), stagingBuffer, stagingBufferMemory);
+    createBuffer(vmuImageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, static_cast<VkMemoryPropertyFlagBits>(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT), vmuScreenBuffer, vmuScreenBufferMemory);
 
-    void* data;
-    if (vkMapMemory(device, stagingBufferMemory, 0, vmuImageSize, 0, &data) != VK_SUCCESS) {
+    if (vkMapMemory(device, vmuScreenBufferMemory, 0, vmuImageSize, 0, &vmuScreenMapped) != VK_SUCCESS) {
         throw std::runtime_error("Memory map failed");
     }
-    memcpy(data, vmuScreen, (size_t)(vmuImageSize));
-    vkUnmapMemory(device, stagingBufferMemory);
+    memcpy(vmuScreenMapped, vmuScreen, (size_t)(vmuImageSize));
 
-    stbi_image_free(pixels);
+    delete[] vmuScreen;
 
     VkImageCreateInfo imageInfo{};
     imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -946,7 +983,7 @@ void VmuGraphics::createTextureImage() {
     vkBindImageMemory(device, textureImage, textureImageMemory, 0);
 
     transitionImageLayout(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-    copyBufferToImage(stagingBuffer, textureImage, static_cast<uint32_t>(vmuWidth), static_cast<uint32_t>(vmuHeight));
+    copyBufferToImage(vmuScreenBuffer, textureImage, static_cast<uint32_t>(vmuWidth), static_cast<uint32_t>(vmuHeight));
 
     transitionImageLayout(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
@@ -1204,9 +1241,9 @@ void VmuGraphics::updateUniformBuffer(uint32_t currentImage) {
     float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
     UniformBufferObject ubo{};
-    ubo.model = glm::mat4(1.0f);// glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-    ubo.view = glm::lookAt(glm::vec3(0.0f, 0.0f, 1.5f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f));
-    ubo.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 10.0f);
+    ubo.model = glm::mat4(1.0f); // glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+    ubo.view = glm::mat4(1.0f); // glm::lookAt(glm::vec3(0.0f, 0.0f, 1.5f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f));
+    ubo.proj = glm::mat4(1.0f);  //glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 10.0f);
     ubo.proj[1][1] *= -1;
 
     memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));

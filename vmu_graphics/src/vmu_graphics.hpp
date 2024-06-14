@@ -3,8 +3,16 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
+#define GLM_FORCE_RADIANS
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#include <glm/vec4.hpp>
+#include <glm/mat4x4.hpp>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -16,20 +24,6 @@
 #include <sstream>
 #include <stdexcept>
 #include <vector>
-
-const uint32_t WIDTH = 800;
-const uint32_t HEIGHT = 600;
-
-const int MAX_FRAMES_IN_FLIGHT = 2;
-
-
-const std::vector<const char*> validationLayers = {
-    "VK_LAYER_KHRONOS_validation"
-};
-
-const std::vector<const char*> deviceExtensions = {
-    VK_KHR_SWAPCHAIN_EXTENSION_NAME
-};
 
 #ifdef NDEBUG
 const bool enableValidationLayers = false;
@@ -55,8 +49,8 @@ struct SwapChainSupportDetails {
 class VmuGraphics {
 public:
 
-    VmuGraphics();
-    ~VmuGraphics() {};
+    VmuGraphics() {}
+    ~VmuGraphics() {}
 
     void run();
 
@@ -126,6 +120,21 @@ private:
     static std::vector<char> readFile(const std::string& filename);
     static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData);
     static void framebufferResizeCallback(GLFWwindow* window, int width, int height);
+    static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
+    static void cursorPositionCallback(GLFWwindow* window, double xpos, double ypos);
+    static void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
+
+    void clearVmuScreen();
+
+    const int MAX_FRAMES_IN_FLIGHT = 2;
+
+    const std::vector<const char*> validationLayers = {
+        "VK_LAYER_KHRONOS_validation"
+    };
+
+    const std::vector<const char*> deviceExtensions = {
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME
+    };
 
     VkInstance instance;
     VkDebugUtilsMessengerEXT debugMessenger;
@@ -150,7 +159,6 @@ private:
     VkDescriptorPool graphicsDescriptorPool;
     std::vector<VkDescriptorSet> graphicsDescriptorSets;
 
-
     VkPipeline graphicsPipeline;
     VkCommandPool graphicsCommandPool;
     std::vector<VkCommandBuffer> graphicsCommandBuffers;
@@ -163,8 +171,8 @@ private:
     std::vector<VkDeviceMemory> uniformBuffersMemory;
     std::vector<void*> uniformBuffersMapped;
 
-    VkBuffer stagingBuffer;
-    VkDeviceMemory stagingBufferMemory;
+    VkBuffer vmuScreenBuffer;
+    VkDeviceMemory vmuScreenBufferMemory;
     VkImage textureImage;
     VkImageView textureImageView;
     VkSampler textureSampler;
@@ -173,7 +181,13 @@ private:
     std::vector<VkSemaphore> renderFinishedSemaphores;
     std::vector<VkFence> inFlightFences;
 
-    unsigned char* vmuScreen = nullptr;
-    int vmuWidth;
-    int vmuHeight;
+    void* vmuScreenMapped = nullptr;
+    const int vmuWidth = 48;
+    const int vmuHeight = 32;
+    const int scale = 20;
+    glm::ivec3 backgroundColor = glm::ivec3(255, 255, 255);
+    glm::ivec3 foregroundColor = glm::ivec3(0, 0, 0);
+
+    bool leftLatch = false;
+    bool rightLatch = false;
 };
