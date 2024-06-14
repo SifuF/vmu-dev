@@ -23,6 +23,7 @@
 #include <set>
 #include <sstream>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 #ifdef NDEBUG
@@ -30,6 +31,12 @@ const bool enableValidationLayers = false;
 #else
 const bool enableValidationLayers = true;
 #endif
+
+static struct ScreenColors {
+    glm::ivec3 white = glm::ivec3(255, 255, 255);
+    glm::ivec3 black = glm::ivec3(0, 0, 0);
+    glm::ivec3 greenLcd = glm::ivec3(170, 190, 120);
+} screenColors;
 
 struct QueueFamilyIndices {
     std::optional<uint32_t> graphicsFamily;
@@ -60,6 +67,7 @@ public:
 private:
     void initWindow();
     void initVulkan();
+    void readImageDataFromSrc();
     void mainLoop();
     void doWork();
     void cleanup();
@@ -125,6 +133,7 @@ private:
     static void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
 
     void clearVmuScreen();
+    void saveVmuScreen();
 
     const int MAX_FRAMES_IN_FLIGHT = 2;
 
@@ -185,8 +194,8 @@ private:
     const int vmuWidth = 48;
     const int vmuHeight = 32;
     const int scale = 20;
-    glm::ivec3 backgroundColor = glm::ivec3(255, 255, 255);
-    glm::ivec3 foregroundColor = glm::ivec3(0, 0, 0);
+    glm::ivec3 backgroundColor = screenColors.greenLcd;
+    glm::ivec3 foregroundColor = screenColors.black;
 
     bool leftLatch = false;
     bool rightLatch = false;

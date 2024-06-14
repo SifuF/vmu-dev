@@ -61,8 +61,57 @@ const std::vector<uint16_t> indices = {
 void VmuGraphics::run() {
     initWindow();
     initVulkan();
+    readImageDataFromSrc();
     mainLoop();
     cleanup();
+}
+
+void VmuGraphics::readImageDataFromSrc() { 
+    std::fstream fs("../../vmu_src/snake.s");
+    if (!fs) {
+        throw std::runtime_error("cannot open src file!");
+    }
+
+    std::string imageStr = "";
+    std::string line;
+    while (std::getline(fs, line)) {
+        if (line == "image_data:") {
+            for (int j = 0; j < 32; ++j) {
+                std::getline(fs, line);
+                for (int i = 0; i < line.length(); ++i) {
+                    if (line[i] == '%') {
+                        imageStr += line.substr(i + 1, 8);
+                        i += 8;
+                    }
+                }
+            }
+        }
+    }
+
+    int i = 1;
+    for (const auto & c : imageStr) {
+        std::cout << c;
+        if ((i % 8 == 0)) {
+            std::cout << " ";
+        }
+        if ((i % 48 == 0)) {
+            std::cout << std::endl;
+        }
+        i++;
+    }
+
+    for (int i = 0; i < imageStr.size(); i++) {
+        auto* vmuScreen = reinterpret_cast<unsigned char*>(vmuScreenMapped);
+        if (imageStr[i] == '1') {
+            const int x = i % vmuWidth;
+            const int y = vmuHeight - 1 - i / vmuWidth;
+
+            vmuScreen[4 * x + y * vmuWidth * 4] = foregroundColor.x;
+            vmuScreen[4 * x + 1 + y * vmuWidth * 4] = foregroundColor.y;
+            vmuScreen[4 * x + 2 + y * vmuWidth * 4] = foregroundColor.z;
+            vmuScreen[4 * x + 3 + y * vmuWidth * 4] = 255;
+        }
+    }
 }
 
 void VmuGraphics::initWindow() {
@@ -99,8 +148,11 @@ void VmuGraphics::keyCallback(GLFWwindow* window, int key, int scancode, int act
         app->foregroundColor.y = rand() % 256;
         app->foregroundColor.z = rand() % 256;
     }
-    if (key == GLFW_KEY_C && action == GLFW_PRESS) {
+    else if (key == GLFW_KEY_C && action == GLFW_PRESS) {
         app->clearVmuScreen();
+    }
+    else if (key == GLFW_KEY_S && action == GLFW_PRESS) {
+        app->saveVmuScreen();
     }
 }
 
@@ -143,16 +195,60 @@ void VmuGraphics::cursorPositionCallback(GLFWwindow* window, double xpos, double
         return;
     }
 
-    unsigned char* dataInt = reinterpret_cast<unsigned char*>(app->vmuScreenMapped);
-    dataInt[4 * x + y * app->vmuWidth * 4] = color.x;
-    dataInt[4 * x + 1 + y * app->vmuWidth * 4] = color.y;
-    dataInt[4 * x + 2 + y * app->vmuWidth * 4] = color.z;
-    dataInt[4 * x + 3 + y * app->vmuWidth * 4] = 255;
+    unsigned char* vmuScreen = reinterpret_cast<unsigned char*>(app->vmuScreenMapped);
+    vmuScreen[4 * x + y * app->vmuWidth * 4] = color.x;
+    vmuScreen[4 * x + 1 + y * app->vmuWidth * 4] = color.y;
+    vmuScreen[4 * x + 2 + y * app->vmuWidth * 4] = color.z;
+    vmuScreen[4 * x + 3 + y * app->vmuWidth * 4] = 255;
 }
 
 void VmuGraphics::clearVmuScreen() {
-    std::memset(vmuScreenMapped, 255, vmuWidth * vmuHeight * 4);
-    backgroundColor = glm::ivec3(255, 255, 255);
+    foregroundColor = screenColors.black;
+    backgroundColor = screenColors.greenLcd;
+    unsigned char* vmuScreen = reinterpret_cast<unsigned char*>(vmuScreenMapped);
+    for (int i = 0; i < vmuWidth * vmuHeight * 4; i+=4) {
+        vmuScreen[i] = backgroundColor.x;
+        vmuScreen[i + 1] = backgroundColor.y;
+        vmuScreen[i + 2] = backgroundColor.z;
+        vmuScreen[i + 3] = 255;
+    }
+}
+
+void VmuGraphics::saveVmuScreen() {
+    std::string outputStr;
+    outputStr.resize(vmuWidth * vmuHeight);
+    unsigned char* vmuScreen = reinterpret_cast<unsigned char*>(vmuScreenMapped);
+    int j = 0;
+    for (int i = 0; i < vmuWidth * vmuHeight * 4; i += 4) {
+        const int x = j % vmuWidth;
+        const int y = vmuHeight - 1 - j / vmuWidth;
+
+        if (vmuScreen[i] != backgroundColor.x) {
+            outputStr[x + y * vmuWidth] = '1';
+        }
+        else {
+            outputStr[x + y * vmuWidth] = '0';
+        }
+        j++;
+    }
+
+    std::ofstream fs("output.txt");
+    for (int j = 0; j < vmuHeight; j++) {
+        for (int i = 0; i < vmuWidth; i++) {
+            if (i % 8 == 0) {
+                if (i == 0) {
+                    fs << "    .byte %";
+                }
+                else {
+                    fs << ",%";
+                }
+            }
+            fs << outputStr[i + vmuWidth * j];
+        }
+        fs << '\n';
+    }
+    
+   
 }
 
 void VmuGraphics::initVulkan() {
