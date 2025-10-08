@@ -247,8 +247,6 @@ void VmuGraphics::saveVmuScreen() {
         }
         fs << '\n';
     }
-    
-   
 }
 
 void VmuGraphics::initVulkan() {
